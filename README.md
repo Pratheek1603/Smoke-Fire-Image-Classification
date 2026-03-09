@@ -1,39 +1,52 @@
-# Smoke-Fire-Image-Classification
-A C++ machine learning project that trains a neural network using OpenCV's ANN_MLP to classify Smoke vs Fire from images using bounding box annotations in YOLO format.
 Smoke / Fire Classification using OpenCV Neural Network (C++)
 
-This project trains a simple neural network in C++ using OpenCV's ANN_MLP module to classify smoke and fire from image regions.
-The training data consists of 14,000+ images with YOLO format bounding box annotations.
+This project trains a neural network in C++ using OpenCV's ANN_MLP module to classify smoke and fire from image regions.
 
-The program extracts object regions from the images using the YOLO labels, preprocesses them, and trains a fully connected neural network to perform binary classification.
+The dataset contains 14,000+ images with YOLO-format bounding box annotations.
 
-The final trained model is saved as:
+The program:
+
+extracts object regions from images
+
+preprocesses them
+
+converts them into feature vectors
+
+trains a fully connected neural network for binary classification
+
+The trained model is saved as:
 
 smoke_fire_nn.xml
 
-which can later be loaded for inference.
+This model can later be loaded for inference.
 
 Project Overview
 
-The main idea is to:
+Main steps in the project:
 
 Load images and YOLO annotations
 
-Extract the labeled regions
+Extract labeled regions from images
 
-Resize them to a fixed size
+Resize regions to a fixed size
 
-Convert them into feature vectors
+Convert images into feature vectors
 
 Train a neural network
 
-Evaluate accuracy on train / validation / test sets
+Evaluate performance on training, validation, and test sets
 
-This implementation uses only OpenCV + C++, without external deep learning frameworks.
+The implementation uses only:
 
-Dataset Format
+C++
 
-The dataset is expected in a structure similar to common YOLO datasets.
+OpenCV Machine Learning module
+
+No external deep learning frameworks are used.
+
+Dataset Structure
+
+The dataset follows a YOLO-style directory structure.
 
 data/
 
@@ -53,7 +66,15 @@ test/
     images/
     labels/
 
-Each label file contains bounding boxes in YOLO format:
+Each image has a corresponding label file with the same name.
+
+Example:
+
+img1.jpg
+img1.txt
+YOLO Label Format
+
+Each label file contains bounding box annotations in YOLO format.
 
 <class_id> <x_center> <y_center> <width> <height>
 
@@ -62,69 +83,59 @@ Example:
 0 0.45 0.51 0.30 0.26
 1 0.60 0.40 0.22 0.19
 
-Where:
+Class mapping:
 
 0 = Smoke
 1 = Fire
 
-Coordinates are normalized between 0 and 1.
+All coordinates are normalized between 0 and 1.
 
-Processing Pipeline
+Image Processing Pipeline
 
-For every image:
+For each image, the following steps are performed:
 
-Read the image
+Read the image from disk
 
-Load corresponding label file
+Load the corresponding label file
 
-Convert YOLO coordinates to OpenCV rectangle
+Convert YOLO coordinates into an OpenCV rectangle
 
-Crop the region from the image
+Crop the region of interest from the image
 
-Resize to 32x32
+Resize the region to 32 × 32 pixels
 
 Normalize pixel values
 
-Flatten into a feature vector
+Flatten the image into a feature vector
 
-The final feature size:
+Final feature size:
 
-32 x 32 x 3 = 3072
+32 × 32 × 3 = 3072
 Program Flow
-                Start
-                  |
-                  v
-        Load Training Dataset
-                  |
-                  v
-        Extract Bounding Boxes
-                  |
-                  v
-        Crop Image Regions
-                  |
-                  v
-          Resize (32x32)
-                  |
-                  v
-         Normalize Pixels
-                  |
-                  v
-      Flatten → Feature Vector
-                  |
-                  v
-         Train ANN_MLP Model
-                  |
-                  v
-      Evaluate (Train / Val / Test)
-                  |
-                  v
-        Save Model (.xml)
-                  |
-                  v
-                 End
+Start
+   |
+Load Training Dataset
+   |
+Extract Bounding Boxes
+   |
+Crop Image Regions
+   |
+Resize (32x32)
+   |
+Normalize Pixels
+   |
+Flatten → Feature Vector
+   |
+Train ANN_MLP Model
+   |
+Evaluate (Train / Val / Test)
+   |
+Save Model (.xml)
+   |
+End
 Neural Network Architecture
 
-The network is a fully connected multilayer perceptron.
+The model is a Multilayer Perceptron (MLP).
 
 Input Layer     : 3072
 Hidden Layer 1  : 512
@@ -132,32 +143,35 @@ Hidden Layer 2  : 128
 Hidden Layer 3  : 32
 Output Layer    : 2
 
-Activation function:
+Activation Function:
 
 SIGMOID_SYM
 
-Training method:
+Training Method:
 
 Backpropagation
 
-Training iterations:
+Training Iterations:
 
 100
-Building the Project
+Requirements
 
-Requirements:
+The project requires:
 
 C++17
 
 OpenCV 4.x
 
-Compiler with filesystem support
+A compiler supporting std::filesystem
 
-Compile with g++:
+Build Instructions
+
+Compile using g++:
 
 g++ main.cpp -o smoke_fire_nn `pkg-config --cflags --libs opencv4` -std=c++17
+Running the Program
 
-Run the program:
+Run the compiled executable:
 
 ./smoke_fire_nn
 Example Console Output
@@ -174,17 +188,10 @@ Validation Accuracy: 91.6%
 Test Accuracy: 90.9%
 Output Model
 
-After training finishes the model is stored as:
+After training, the neural network is saved as:
 
 smoke_fire_nn.xml
 
 The model can be loaded later using:
 
 Ptr<ANN_MLP> model = ANN_MLP::load("smoke_fire_nn.xml");
-Notes
-
-Regions smaller than 20x20 pixels are ignored.
-
-Each cropped region is resized to 32×32 before training.
-
-Labels are converted to one-hot encoded vectors for training.
