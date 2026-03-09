@@ -192,6 +192,35 @@ After training, the neural network is saved as:
 
 smoke_fire_nn.xml
 
-The model can be loaded later using:
+Dataset
+
+This project uses the Smoke / Fire Detection YOLO dataset.
+
+Dataset source:
+https://www.kaggle.com/datasets/sayedgamal99/smoke-fire-detection-yolo
+
+The dataset contains 14,000+ labeled images with YOLO bounding box annotations for smoke and fire.
+
+Download Instructions
+
+Open the dataset page on Kaggle
+
+Download the dataset
+
+Extract it into the project directory so the structure looks like:
+
+data/
+
+train/
+    images/
+    labels/
+
+val/
+    images/
+    labels/
+
+test/
+    images/
+    labels/
 
 Ptr<ANN_MLP> model = ANN_MLP::load("smoke_fire_nn.xml");
