@@ -1,0 +1,238 @@
+#include <opencv2/opencv.hpp>
+#include <opencv2/ml.hpp>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+
+using namespace cv;
+using namespace cv::ml;
+using namespace std;
+
+namespace fs = std::filesystem;
+
+Rect yoloToRect(float xc,float yc,float w,float h,int W,int H)
+{
+    int x=int((xc-w/2)*W);
+    int y=int((yc-h/2)*H);
+    int width=int(w*W);
+    int height=int(h*H);
+
+    return Rect(x,y,width,height);
+}
+
+Mat computeColorHist(const Mat& img)
+{
+    vector<Mat> channels;
+    split(img,channels);
+
+    int histSize=16;
+    float range[]={0,256};
+    const float* histRange={range};
+
+    Mat feature;
+
+    for(int i=0;i<3;i++)
+    {
+        Mat hist;
+
+        calcHist(&channels[i],1,0,Mat(),hist,1,&histSize,&histRange);
+
+        hist=hist.reshape(1,1);
+
+        feature.push_back(hist);
+    }
+
+    feature=feature.reshape(1,1);
+
+    return feature;
+}
+
+Mat preprocess(const Mat& roi)
+{
+    Mat img;
+
+    resize(roi,img,Size(32,32));
+
+    Mat floatImg;
+    img.convertTo(floatImg,CV_32F,1.0/255.0);
+
+    Mat pixels=floatImg.reshape(1,1);
+
+    Mat histFeat=computeColorHist(img);
+
+    Mat features;
+
+    hconcat(pixels,histFeat,features);
+
+    return features;
+}
+
+void loadDataset(const string& imgDir,
+                 const string& lblDir,
+                 vector<Mat>& feats,
+                 vector<int>& labs)
+{
+    int counter=0;
+
+    for(const auto& file : fs::directory_iterator(imgDir))
+    {
+        string imgPath=file.path().string();
+        string name=file.path().stem().string();
+
+        string labelPath=lblDir+name+".txt";
+
+        Mat img=imread(imgPath);
+
+        if(img.empty()) continue;
+
+        ifstream f(labelPath);
+        if(!f.is_open()) continue;
+
+        while(true)
+        {
+            int cls;
+            float xc,yc,w,h;
+
+            if(!(f>>cls>>xc>>yc>>w>>h))
+                break;
+
+            Rect r=yoloToRect(xc,yc,w,h,img.cols,img.rows);
+            r=r&Rect(0,0,img.cols,img.rows);
+
+            if(r.width<20||r.height<20)
+                continue;
+
+            Mat roi=img(r);
+
+            Mat feat=preprocess(roi);
+
+            feats.push_back(feat);
+            labs.push_back(cls);
+        }
+
+        counter++;
+
+        if(counter%500==0)
+            cout<<"Loaded "<<counter<<" images"<<endl;
+    }
+}
+
+void convertToMatrices(const vector<Mat>& feats,
+                       const vector<int>& labs,
+                       Mat& features,
+                       Mat& labels)
+{
+    int N=feats.size();
+    int D=feats[0].cols;
+
+    features=Mat(N,D,CV_32F);
+    labels=Mat::zeros(N,2,CV_32F);
+
+    for(int i=0;i<N;i++)
+    {
+        feats[i].copyTo(features.row(i));
+
+        int cls=labs[i];
+        labels.at<float>(i,cls)=1.0f;
+    }
+}
+
+float evaluate(Ptr<ANN_MLP> model,
+               const Mat& features,
+               const Mat& labels)
+{
+    int correct=0;
+
+    for(int i=0;i<features.rows;i++)
+    {
+        Mat output;
+
+        model->predict(features.row(i),output);
+
+        Point predClass;
+        minMaxLoc(output,NULL,NULL,NULL,&predClass);
+
+        Point trueClass;
+        minMaxLoc(labels.row(i),NULL,NULL,NULL,&trueClass);
+
+        if(predClass.x==trueClass.x)
+            correct++;
+    }
+
+    return float(correct)/features.rows;
+}
+
+int main()
+{
+    vector<Mat> trainFeats,valFeats,testFeats;
+    vector<int> trainLabs,valLabs,testLabs;
+
+    cout<<"Loading training set"<<endl;
+
+    loadDataset("data/train/images/",
+                "data/train/labels/",
+                trainFeats,trainLabs);
+
+    cout<<"Loading validation set"<<endl;
+
+    loadDataset("data/val/images/",
+                "data/val/labels/",
+                valFeats,valLabs);
+
+    cout<<"Loading test set"<<endl;
+
+    loadDataset("data/test/images/",
+                "data/test/labels/",
+                testFeats,testLabs);
+
+    Mat trainF,trainL,valF,valL,testF,testL;
+
+    convertToMatrices(trainFeats,trainLabs,trainF,trainL);
+    convertToMatrices(valFeats,valLabs,valF,valL);
+    convertToMatrices(testFeats,testLabs,testF,testL);
+
+    cout<<"Train samples: "<<trainF.rows<<endl;
+
+    Ptr<ANN_MLP> model=ANN_MLP::create();
+
+    int featureSize=trainF.cols;
+
+    Mat layers=(Mat_<int>(1,4)<<
+                featureSize,
+                256,
+                64,
+                2);
+
+    model->setLayerSizes(layers);
+
+    model->setActivationFunction(ANN_MLP::SIGMOID_SYM);
+
+    model->setTrainMethod(ANN_MLP::BACKPROP);
+
+    model->setBackpropMomentumScale(0.1);
+    model->setBackpropWeightScale(0.001);
+
+    model->setTermCriteria(
+        TermCriteria(
+            TermCriteria::MAX_ITER,
+            150,
+            0));
+
+    cout<<"Training neural network..."<<endl;
+
+    model->train(trainF,ROW_SAMPLE,trainL);
+
+    cout<<"Training finished"<<endl;
+
+    float trainAcc=evaluate(model,trainF,trainL);
+    float valAcc=evaluate(model,valF,valL);
+    float testAcc=evaluate(model,testF,testL);
+
+    cout<<"Train Accuracy: "<<trainAcc*100<<"%"<<endl;
+    cout<<"Validation Accuracy: "<<valAcc*100<<"%"<<endl;
+    cout<<"Test Accuracy: "<<testAcc*100<<"%"<<endl;
+
+    model->save("smoke_fire_nn_fast.xml");
+
+    return 0;
+}
